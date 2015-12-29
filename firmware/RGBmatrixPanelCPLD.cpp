@@ -317,10 +317,8 @@ void RGBmatrixPanelCPLD::resync(void) {
     row = 0;
     plane = 0;
     digitalWrite(clr_pin, LOW);
-    delay(10);
     digitalWrite(clr_pin, HIGH);
-    delay(10);
-    displayTimer.resetPeriod_SIT(20, uSec);
+    displayTimer.resetPeriod_SIT(1, uSec);
 }
 
 void refreshISR(void) {
