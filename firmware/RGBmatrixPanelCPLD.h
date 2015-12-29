@@ -83,6 +83,7 @@ class RGBmatrixPanelCPLD : public Adafruit_GFX {
         volatile uint8_t *buffPtr;
         uint8_t *matrixbuff[2];
         int clr_pin, oe_pin;
+        bool resync_flag;
 };
 
 #endif //_RGBMATRIXPANELCPLD_H

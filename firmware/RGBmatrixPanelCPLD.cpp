@@ -185,8 +185,8 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
     // Row increment at the beginning of the plane=0 data (longest time period)
     // That is, right after displaying the last plane (shortest time period) of the previous row
     // There should only be 16 row-increment bits set total, as all panels must be chained together
-    for (uint32_t i=1; i<=16; i++) {
-        *(matrixbuff[0]+(width*(height>>5)*i)-1) |= (1<<7);
+    for (uint32_t i=0; i<16; i++) {
+        *(matrixbuff[0]+(width*(height>>5)*i)) |= (1<<7);
     }
 }
 
@@ -297,6 +297,14 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
         Plane 3 displays for 1 cycle
     */
 
+    if (resync_flag && row==15) {
+      row = 0;
+      plane = 0;
+      pinResetFast(clr_pin);
+      pinSetFast(clr_pin);
+      resync_flag = false;
+    }
+
     displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
     SPI.transfer(matrixbuff[0] + (plane*height*(width>>1)) + (row*width*(height>>5)), NULL, width*(height>>5), rowCompleteCallback);
 
@@ -313,12 +321,7 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
 }
 
 void RGBmatrixPanelCPLD::resync(void) {
-    displayTimer.resetPeriod_SIT(250, hmSec);
-    row = 0;
-    plane = 0;
-    digitalWrite(clr_pin, LOW);
-    digitalWrite(clr_pin, HIGH);
-    displayTimer.resetPeriod_SIT(1, uSec);
+    resync_flag = true;
 }
 
 void refreshISR(void) {
