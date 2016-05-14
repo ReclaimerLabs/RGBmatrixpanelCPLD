@@ -77,8 +77,8 @@ int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
     pinMode(oe_pin, OUTPUT);
     digitalWrite(oe_pin, LOW);
     
-    row = 0;
-    plane = 0;
+    row = 15;
+    plane = 3;
     
     return 0;
 }
@@ -96,8 +96,8 @@ void RGBmatrixPanelCPLD::begin(void) {
     rowComplete = 0;
     activePanel = this;
     
-    row = 0;
-    plane = 0;
+    row = 15;
+    plane = 3;
     
     resync();
     displayTimer.begin(refreshISR, 250, uSec);
@@ -176,7 +176,7 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
         memset(matrixbuff[0]+(depth-p-1)*width*(height>>1), color, bufSize);
     }
     
-    // Add latch signal to upper bits
+    // Add latch signal to last byte of each plane of each row
     for (uint32_t i=1; i<=(depth*16); i++) {
         *(matrixbuff[0]+(width*(height>>5)*i)-1) |= (1<<6);
     }
@@ -185,8 +185,8 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
     // Row increment at the beginning of the plane=0 data (longest time period)
     // That is, right after displaying the last plane (shortest time period) of the previous row
     // There should only be 16 row-increment bits set total, as all panels must be chained together
-    for (uint32_t i=0; i<16; i++) {
-        *(matrixbuff[0]+(width*(height>>5)*i)) |= (1<<7);
+    for (uint32_t i=1; i<=16; i++) {
+        *(matrixbuff[0]+(width*(height>>5)*i)-1) |= (1<<7);
     }
 }
 
@@ -306,8 +306,7 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     }
 
     displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
-    SPI.transfer(matrixbuff[0] + (plane*height*(width>>1)) + (row*width*(height>>5)), NULL, width*(height>>5), rowCompleteCallback);
-
+    
     if (plane == (depth-1)) {
         plane = 0;
         if (row == 15) {
@@ -318,6 +317,8 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     } else {
         plane++;
     }
+
+    SPI.transfer(matrixbuff[0] + (plane*height*(width>>1)) + (row*width*(height>>5)), NULL, width*(height>>5), rowCompleteCallback);
 }
 
 void RGBmatrixPanelCPLD::resync(void) {
