@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2015 Jason Cerundolo
+Copyright (c) 2016 Jason Cerundolo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -55,17 +55,17 @@ void rowCompleteCallback(void);
 int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
     uint32_t bufSize = p*x*(y>>1);
     matrixbuff[0] = (uint8_t *)malloc(bufSize);
+    zerobuff = (uint8_t *)malloc(x*(y>>1));
+    memset(zerobuff, 0x00, x*(y>>1));
+    *(zerobuff+(width*(height>>5))-1) |= (1<<6);
     if (matrixbuff[0] == NULL) {
         return -1;
     }
     
     pinMode(clr_pin, OUTPUT);
-    digitalWrite(clr_pin, HIGH);
-    delay(100);
-    digitalWrite(clr_pin, LOW);
-    delay(100);
-    digitalWrite(clr_pin, HIGH);
-    delay(100);
+    pinSetFast(clr_pin);
+    pinResetFast(clr_pin);
+    pinSetFast(clr_pin);
     
     SPI.begin();
     SPI.setBitOrder(MSBFIRST);
@@ -86,8 +86,8 @@ int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
 RGBmatrixPanelCPLD::RGBmatrixPanelCPLD(uint16_t x, uint16_t y) : Adafruit_GFX(x, y) {
     clr_pin = D7;
     oe_pin = D2;
-    width = (x/32)*32; // ensure width and height are multiples of 32
-    height = (y/32)*32;
+    width = (x>>5)<<5; // ensure width and height are multiples of 32
+    height = (y>>5)<<5;
     depth = 4;
     initStatus = init(x, y, depth);
 }
@@ -181,12 +181,13 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
         *(matrixbuff[0]+(width*(height>>5)*i)-1) |= (1<<6);
     }
     
-    // Add row increment signal to upper bits
+    // Add row increment signal
     // Row increment at the beginning of the plane=0 data (longest time period)
     // That is, right after displaying the last plane (shortest time period) of the previous row
     // There should only be 16 row-increment bits set total, as all panels must be chained together
+    // For some reason, setting it to the be the 2nd to last byte works better than the last byte
     for (uint32_t i=1; i<=16; i++) {
-        *(matrixbuff[0]+(width*(height>>5)*i)-1) |= (1<<7);
+        *(matrixbuff[0]+(width*(height>>5)*i)-2) |= (1<<7);
     }
 }
 
@@ -298,16 +299,16 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     */
 
     if (resync_flag && row==15) {
-      row = 0;
-      plane = 0;
       pinResetFast(clr_pin);
       pinSetFast(clr_pin);
       resync_flag = false;
     }
-
-    displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
     
-    if (plane == (depth-1)) {
+    if (plane < depth) {
+        displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
+    }
+    
+    if (plane == depth) {
         plane = 0;
         if (row == 15) {
             row = 0;
@@ -317,8 +318,13 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     } else {
         plane++;
     }
-
-    SPI.transfer(matrixbuff[0] + (plane*height*(width>>1)) + (row*width*(height>>5)), NULL, width*(height>>5), rowCompleteCallback);
+    
+    if (plane < depth) {
+        SPI.transfer(matrixbuff[0] + (plane*height*(width>>1)) + (row*width*(height>>5)), NULL, width*(height>>5), rowCompleteCallback);
+    } else {
+        displayTimer.resetPeriod_SIT(69, uSec);
+        SPI.transfer(zerobuff, NULL, width*(height>>5), rowCompleteCallback);
+    }
 }
 
 void RGBmatrixPanelCPLD::resync(void) {

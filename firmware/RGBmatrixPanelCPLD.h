@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2015 Jason Cerundolo
+Copyright (c) 2016 Jason Cerundolo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -82,6 +82,7 @@ class RGBmatrixPanelCPLD : public Adafruit_GFX {
         uint16_t transfer_row_width;
         volatile uint8_t *buffPtr;
         uint8_t *matrixbuff[2];
+        uint8_t *zerobuff;
         int clr_pin, oe_pin;
         bool resync_flag;
 };
