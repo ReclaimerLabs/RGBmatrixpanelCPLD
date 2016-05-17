@@ -53,14 +53,16 @@ void refreshISR(void);
 void rowCompleteCallback(void);
 
 int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
-    uint32_t bufSize = p*x*(y>>1);
+    uint32_t bufSize = p*plane_size;
     matrixbuff[0] = (uint8_t *)malloc(bufSize);
-    zerobuff = (uint8_t *)malloc(x*(y>>1));
-    memset(zerobuff, 0x00, x*(y>>1));
-    *(zerobuff+(width*(height>>5))-1) |= (1<<6);
-    if (matrixbuff[0] == NULL) {
+    zerobuff = (uint8_t *)malloc(row_size);
+    
+    if ((matrixbuff[0] == NULL) || (zerobuff == NULL)) {
         return -1;
     }
+    
+    memset(zerobuff, 0x00, row_size);
+    *(zerobuff+row_size-1) |= (1<<6);
     
     pinMode(clr_pin, OUTPUT);
     pinSetFast(clr_pin);
@@ -88,8 +90,10 @@ RGBmatrixPanelCPLD::RGBmatrixPanelCPLD(uint16_t x, uint16_t y) : Adafruit_GFX(x,
     oe_pin = D2;
     width = (x>>5)<<5; // ensure width and height are multiples of 32
     height = (y>>5)<<5;
+    row_size = width*(height>>5);
+    plane_size = width*(height>>1);
     depth = 4;
-    initStatus = init(x, y, depth);
+    initStatus = init(width, height, depth);
 }
 
 void RGBmatrixPanelCPLD::begin(void) {
@@ -110,51 +114,52 @@ void RGBmatrixPanelCPLD::drawPixel(int16_t x, int16_t y, uint16_t c) {
     */
     
     uint16_t y_int;
-    if ((y >= 0) && (x >= 0)) {
+    if ((y >= 0) && (x >= 0) && (y < height) && (x < width)) {
         y_int = (y%32);
     } else {
         return;
     }
     
     if ((y%32) < 16) {
-        *(matrixbuff[0]+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(y_int*width*(height>>5)+x)) & 0xC7) | \
+        *(matrixbuff[0]+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(y_int*row_size)+x) & 0xC7) | \
             (((c & (1<<15))>>15) << 5) | \
             (((c & (1<<10))>>10) << 4) | \
             (((c & (1<<4))>>4) << 3);
-        *(matrixbuff[0]+(width*(height>>1))+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(width*(height>>1))+(y_int*width*(height>>5)+x)) & 0xC7) | \
+        *(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) & 0xC7) | \
             (((c & (1<<14))>>14) << 5) | \
             (((c & (1<<9))>>9) << 4) | \
             (((c & (1<<3))>>3) << 3);
-        *(matrixbuff[0]+(2*width*(height>>1))+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(2*width*(height>>1))+(y_int*width*(height>>5)+x)) & 0xC7) | \
+        *(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) & 0xC7) | \
             (((c & (1<<13))>>13) << 5) | \
             (((c & (1<<8))>>8) << 4) | \
             (((c & (1<<2))>>2) << 3);
-        *(matrixbuff[0]+(3*width*(height>>1))+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(3*width*(height>>1))+(y_int*width*(height>>5)+x)) & 0xC7) | \
+        *(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) & 0xC7) | \
             (((c & (1<<12))>>12) << 5) | \
             (((c & (1<<7))>>7) << 4) | \
             (((c & (1<<1))>>1) << 3);
     } else {
-        *(matrixbuff[0]+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(y_int*width*(height>>5)+x)) & 0xF8) | \
+        y_int = (y_int-16);
+        *(matrixbuff[0]+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(y_int*row_size)+x) & 0xF8) | \
             (((c & (1<<15))>>15) << 2) | \
             (((c & (1<<10))>>10) << 1) | \
             (((c & (1<<4))>>4) << 0);
-        *(matrixbuff[0]+(width*(height>>1))+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(width*(height>>1))+(y_int*width*(height>>5)+x)) & 0xF8) | \
+        *(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) & 0xF8) | \
             (((c & (1<<14))>>14) << 2) | \
             (((c & (1<<9))>>9) << 1) | \
             (((c & (1<<3))>>3) << 0);
-        *(matrixbuff[0]+(2*width*(height>>1))+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(2*width*(height>>1))+(y_int*width*(height>>5)+x)) & 0xF8) | \
+        *(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) & 0xF8) | \
             (((c & (1<<13))>>13) << 2) | \
             (((c & (1<<8))>>8) << 1) | \
             (((c & (1<<2))>>2) << 0);
-        *(matrixbuff[0]+(3*width*(height>>1))+(y_int*width*(height>>5)+x)) = \
-            (*(matrixbuff[0]+(3*width*(height>>1))+(y_int*width*(height>>5)+x)) & 0xF8) | \
+        *(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) = \
+            (*(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) & 0xF8) | \
             (((c & (1<<12))>>12) << 2) | \
             (((c & (1<<7))>>7) << 1) | \
             (((c & (1<<1))>>1) << 0);
@@ -173,12 +178,12 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
         color |= (( (c & (1 << (7+p))) >> (7+p)) << 1);   // lower green
         color |= (  (c & (1 << (1+p))) >> (1+p));         // lower blue
         color |= (color << 3); // duplicate lower and upper colors
-        memset(matrixbuff[0]+(depth-p-1)*width*(height>>1), color, bufSize);
+        memset((matrixbuff[0]+(depth-p-1)*plane_size), color, bufSize);
     }
     
     // Add latch signal to last byte of each plane of each row
     for (uint32_t i=1; i<=(depth*16); i++) {
-        *(matrixbuff[0]+(width*(height>>5)*i)-1) |= (1<<6);
+        *(matrixbuff[0]+(row_size*i)-1) |= (1<<6);
     }
     
     // Add row increment signal
@@ -187,7 +192,7 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
     // There should only be 16 row-increment bits set total, as all panels must be chained together
     // For some reason, setting it to the be the 2nd to last byte works better than the last byte
     for (uint32_t i=1; i<=16; i++) {
-        *(matrixbuff[0]+(width*(height>>5)*i)-2) |= (1<<7);
+        *(matrixbuff[0]+(row_size*i)-2) |= (1<<7);
     }
 }
 
@@ -298,7 +303,7 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
         Plane 3 displays for 1 cycle
     */
 
-    if (resync_flag && row==15) {
+    if (resync_flag && row==15 && plane == 3) {
       pinResetFast(clr_pin);
       pinSetFast(clr_pin);
       resync_flag = false;
@@ -306,6 +311,8 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     
     if (plane < depth) {
         displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
+    } else {
+        displayTimer.resetPeriod_SIT(69, uSec);
     }
     
     if (plane == depth) {
@@ -320,10 +327,9 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     }
     
     if (plane < depth) {
-        SPI.transfer(matrixbuff[0] + (plane*height*(width>>1)) + (row*width*(height>>5)), NULL, width*(height>>5), rowCompleteCallback);
+        SPI.transfer(matrixbuff[0] + (plane*plane_size) + (row*row_size), NULL, row_size, rowCompleteCallback);
     } else {
-        displayTimer.resetPeriod_SIT(69, uSec);
-        SPI.transfer(zerobuff, NULL, width*(height>>5), rowCompleteCallback);
+        SPI.transfer(zerobuff, NULL, row_size, rowCompleteCallback);
     }
 }
 

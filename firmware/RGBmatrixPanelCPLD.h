@@ -78,7 +78,7 @@ class RGBmatrixPanelCPLD : public Adafruit_GFX {
     private:
         int8_t init(uint16_t x, uint16_t y, uint16_t p);
         volatile uint16_t row, plane;
-        uint16_t height, width, depth;
+        uint16_t height, width, depth, row_size, plane_size;
         uint16_t transfer_row_width;
         volatile uint8_t *buffPtr;
         uint8_t *matrixbuff[2];
