@@ -119,8 +119,25 @@ void RGBmatrixPanelCPLD::drawPixel(int16_t x, int16_t y, uint16_t c) {
     } else {
         return;
     }
+    /* Assumes 
+     *   controller is plugged into bottom row of panels
+     *   top row of panels is right-side up
+     *   panels are arranged in a square configuration
+    */
     
-    if ((y%32) < 16) {
+    uint16_t panel_row = y>>5;
+    if ((panel_row % 2) == 0) { 
+        // pixel is on odd panel
+        // right side up
+        x = (x%width) + panel_row*width;
+    } else { 
+        // pixel is on even panel
+        // upside down
+        y_int = (31 - y_int);
+        x = ((width - 1) - (x%width)) + panel_row*width;
+    }
+    
+    if ((y_int) < 16) {
         *(matrixbuff[0]+(y_int*row_size)+x) = \
             (*(matrixbuff[0]+(y_int*row_size)+x) & 0xC7) | \
             (((c & (1<<15))>>15) << 5) | \
@@ -310,9 +327,9 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     }
     
     if (plane < depth) {
-        displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
+        displayTimer.resetPeriod_SIT((70 * (1<<(depth-plane-1))), uSec);
     } else {
-        displayTimer.resetPeriod_SIT(69, uSec);
+        displayTimer.resetPeriod_SIT(70, uSec);
     }
     
     if (plane == depth) {
