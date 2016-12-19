@@ -209,7 +209,7 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
     // There should only be 16 row-increment bits set total, as all panels must be chained together
     // For some reason, setting it to the be the 2nd to last byte works better than the last byte
     for (uint32_t i=1; i<=16; i++) {
-        *(matrixbuff[0]+(row_size*i)-2) |= (1<<7);
+        *(matrixbuff[0]+(row_size*i)-1) |= (1<<7);
     }
 }
 
@@ -325,14 +325,10 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
       pinSetFast(clr_pin);
       resync_flag = false;
     }
-    
-    if (plane < depth) {
-        displayTimer.resetPeriod_SIT((70 * (1<<(depth-plane-1))), uSec);
-    } else {
-        displayTimer.resetPeriod_SIT(70, uSec);
-    }
-    
-    if (plane == depth) {
+ 
+    displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
+
+    if (plane == (depth-1)) {
         plane = 0;
         if (row == 15) {
             row = 0;
@@ -342,12 +338,8 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
     } else {
         plane++;
     }
-    
-    if (plane < depth) {
-        SPI.transfer(matrixbuff[0] + (plane*plane_size) + (row*row_size), NULL, row_size, rowCompleteCallback);
-    } else {
-        SPI.transfer(zerobuff, NULL, row_size, rowCompleteCallback);
-    }
+
+    SPI.transfer(matrixbuff[0] + (plane*plane_size) + (row*row_size), NULL, row_size, rowCompleteCallback);
 }
 
 void RGBmatrixPanelCPLD::resync(void) {
