@@ -71,7 +71,7 @@ int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
     
     SPI.begin();
     SPI.setBitOrder(MSBFIRST);
-    SPI.setClockSpeed(30000000); // 30 MHz max
+    SPI.setClockSpeed(30000000);
     SPI.setDataMode(SPI_MODE0);
     
     fillScreen(0);
@@ -86,7 +86,7 @@ int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
 }
 
 RGBmatrixPanelCPLD::RGBmatrixPanelCPLD(uint16_t x, uint16_t y) : Adafruit_GFX(x, y) {
-    clr_pin = D7;
+    clr_pin = A0;
     oe_pin = D2;
     width = (x>>5)<<5; // ensure width and height are multiples of 32
     height = (y>>5)<<5;
@@ -207,7 +207,6 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
     // Row increment at the beginning of the plane=0 data (longest time period)
     // That is, right after displaying the last plane (shortest time period) of the previous row
     // There should only be 16 row-increment bits set total, as all panels must be chained together
-    // For some reason, setting it to the be the 2nd to last byte works better than the last byte
     for (uint32_t i=1; i<=16; i++) {
         *(matrixbuff[0]+(row_size*i)-1) |= (1<<7);
     }
@@ -325,7 +324,7 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
       pinSetFast(clr_pin);
       resync_flag = false;
     }
- 
+
     displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
 
     if (plane == (depth-1)) {
