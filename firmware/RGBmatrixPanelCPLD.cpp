@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 Jason Cerundolo
+Copyright (c) 2017 Jason Cerundolo
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -51,18 +51,28 @@ static RGBmatrixPanelCPLD *activePanel = NULL;
 
 void refreshISR(void);
 void rowCompleteCallback(void);
+uint8_t *temp;
 
-int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
-    uint32_t bufSize = p*plane_size;
-    matrixbuff[0] = (uint8_t *)malloc(bufSize);
-    zerobuff = (uint8_t *)malloc(row_size);
+int8_t RGBmatrixPanelCPLD::init() {
+    uint32_t bufSize;
     
-    if ((matrixbuff[0] == NULL) || (zerobuff == NULL)) {
-        return -1;
+    if (double_buffer_enabled) {
+        bufSize = 2*depth*plane_size;
+    } else {
+        bufSize = depth*plane_size;
     }
     
-    memset(zerobuff, 0x00, row_size);
-    *(zerobuff+row_size-1) |= (1<<6);
+    front_buffer = (uint8_t *)malloc(bufSize);
+    
+    if (front_buffer == NULL) {
+        return -1;
+    }
+
+    if (double_buffer_enabled) {
+      back_buffer = front_buffer + (bufSize>>1);
+    } else {
+      back_buffer = front_buffer;
+    }
     
     pinMode(clr_pin, OUTPUT);
     pinSetFast(clr_pin);
@@ -73,27 +83,66 @@ int8_t RGBmatrixPanelCPLD::init(uint16_t x, uint16_t y, uint16_t p) {
     SPI.setBitOrder(MSBFIRST);
     SPI.setClockSpeed(30000000);
     SPI.setDataMode(SPI_MODE0);
+
+    if (double_buffer_enabled) {
+      fillScreen(0);
+      uint8_t *temp;
+      temp = front_buffer;
+      front_buffer = back_buffer;
+      back_buffer = temp;
+      fillScreen(0);
+    } else {
+      fillScreen(0);
+    }
     
-    fillScreen(0);
-    
+    swap_requested = false;
+
     pinMode(oe_pin, OUTPUT);
     digitalWrite(oe_pin, LOW);
     
     row = 15;
-    plane = 3;
+    plane = depth-1;
     
     return 0;
 }
 
 RGBmatrixPanelCPLD::RGBmatrixPanelCPLD(uint16_t x, uint16_t y) : Adafruit_GFX(x, y) {
     clr_pin = A0;
-    oe_pin = D2;
+    oe_pin = D2;    
     width = (x>>5)<<5; // ensure width and height are multiples of 32
     height = (y>>5)<<5;
     row_size = width*(height>>5);
     plane_size = width*(height>>1);
-    depth = 4;
-    initStatus = init(width, height, depth);
+    depth = 3;
+    double_buffer_enabled = false;
+    
+    initStatus = init();
+}
+
+RGBmatrixPanelCPLD::RGBmatrixPanelCPLD(uint16_t x, uint16_t y, uint16_t d) : Adafruit_GFX(x, y) {
+    clr_pin = A0;
+    oe_pin = D2;    
+    width = (x>>5)<<5; // ensure width and height are multiples of 32
+    height = (y>>5)<<5;
+    row_size = width*(height>>5);
+    plane_size = width*(height>>1);
+    depth = d;
+    double_buffer_enabled = false;
+    
+    initStatus = init();
+}
+
+RGBmatrixPanelCPLD::RGBmatrixPanelCPLD(uint16_t x, uint16_t y, uint16_t d, bool use_double_buffer) : Adafruit_GFX(x, y) {
+    clr_pin = A0;
+    oe_pin = D2;    
+    width = (x>>5)<<5; // ensure width and height are multiples of 32
+    height = (y>>5)<<5;
+    row_size = width*(height>>5);
+    plane_size = width*(height>>1);
+    depth = d;
+    double_buffer_enabled = use_double_buffer;
+    
+    initStatus = init();
 }
 
 void RGBmatrixPanelCPLD::begin(void) {
@@ -101,10 +150,44 @@ void RGBmatrixPanelCPLD::begin(void) {
     activePanel = this;
     
     row = 15;
-    plane = 3;
+    plane = depth-1;
     
     resync();
-    displayTimer.begin(refreshISR, 250, uSec);
+    
+    // Try to get the hardware timers in decreasing priority
+    // Refer to Table 20 of the STM32F2 reference manual
+    if (displayTimer.begin(refreshISR, 250, uSec, TIMER3) == true) {
+        return;
+    }
+    
+    if (displayTimer.begin(refreshISR, 250, uSec, TIMER4) == true) {
+        return;
+    }
+    
+    if (displayTimer.begin(refreshISR, 250, uSec, TIMER5) == true) {
+        return;
+    }
+    
+    if (displayTimer.begin(refreshISR, 250, uSec, TIMER6) == true) {
+        return;
+    }
+    
+    if (displayTimer.begin(refreshISR, 250, uSec, TIMER7) == true) {
+        return;
+    }
+}
+
+/*
+ * This sets a flag that will be ready by updateDisplay()
+ * It will wait for the start of the next frame to swap, 
+ * then set swap_requested to false.
+ */
+void RGBmatrixPanelCPLD::swapBuffers(void) {
+    if (double_buffer_enabled) {
+        swap_requested = true;
+    } else {
+        swap_requested = false;
+    }
 }
 
 void RGBmatrixPanelCPLD::drawPixel(int16_t x, int16_t y, uint16_t c) {
@@ -138,48 +221,71 @@ void RGBmatrixPanelCPLD::drawPixel(int16_t x, int16_t y, uint16_t c) {
     }
     
     if ((y_int) < 16) {
-        *(matrixbuff[0]+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(y_int*row_size)+x) & 0xC7) | \
-            (((c & (1<<15))>>15) << 5) | \
-            (((c & (1<<10))>>10) << 4) | \
-            (((c & (1<<4))>>4) << 3);
-        *(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) & 0xC7) | \
-            (((c & (1<<14))>>14) << 5) | \
-            (((c & (1<<9))>>9) << 4) | \
-            (((c & (1<<3))>>3) << 3);
-        *(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) & 0xC7) | \
-            (((c & (1<<13))>>13) << 5) | \
-            (((c & (1<<8))>>8) << 4) | \
-            (((c & (1<<2))>>2) << 3);
-        *(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) & 0xC7) | \
-            (((c & (1<<12))>>12) << 5) | \
-            (((c & (1<<7))>>7) << 4) | \
-            (((c & (1<<1))>>1) << 3);
+        if (depth > 0) {
+            *(back_buffer+(y_int*row_size)+x) = \
+                (*(back_buffer+(y_int*row_size)+x) & 0xC7) | \
+                (((c & (1<<15))>>15) << 5) | \
+                (((c & (1<<10))>>10) << 4) | \
+                (((c & (1<<4))>>4) << 3);
+        }
+        
+        if (depth > 1) {
+            *(back_buffer+(plane_size)+(y_int*row_size)+x) = \
+                (*(back_buffer+(plane_size)+(y_int*row_size)+x) & 0xC7) | \
+                (((c & (1<<14))>>14) << 5) | \
+                (((c & (1<<9))>>9) << 4) | \
+                (((c & (1<<3))>>3) << 3);
+        }
+        
+        if (depth > 2) {
+            *(back_buffer+(2*plane_size)+(y_int*row_size)+x) = \
+                (*(back_buffer+(2*plane_size)+(y_int*row_size)+x) & 0xC7) | \
+                (((c & (1<<13))>>13) << 5) | \
+                (((c & (1<<8))>>8) << 4) | \
+                (((c & (1<<2))>>2) << 3);
+        }
+        
+        if (depth > 3) {
+            *(back_buffer+(3*plane_size)+(y_int*row_size)+x) = \
+                (*(back_buffer+(3*plane_size)+(y_int*row_size)+x) & 0xC7) | \
+                (((c & (1<<12))>>12) << 5) | \
+                (((c & (1<<7))>>7) << 4) | \
+                (((c & (1<<1))>>1) << 3);
+        }
+        
     } else {
         y_int = (y_int-16);
-        *(matrixbuff[0]+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(y_int*row_size)+x) & 0xF8) | \
-            (((c & (1<<15))>>15) << 2) | \
-            (((c & (1<<10))>>10) << 1) | \
-            (((c & (1<<4))>>4) << 0);
-        *(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(plane_size)+(y_int*row_size)+x) & 0xF8) | \
-            (((c & (1<<14))>>14) << 2) | \
-            (((c & (1<<9))>>9) << 1) | \
-            (((c & (1<<3))>>3) << 0);
-        *(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(2*plane_size)+(y_int*row_size)+x) & 0xF8) | \
-            (((c & (1<<13))>>13) << 2) | \
-            (((c & (1<<8))>>8) << 1) | \
-            (((c & (1<<2))>>2) << 0);
-        *(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) = \
-            (*(matrixbuff[0]+(3*plane_size)+(y_int*row_size)+x) & 0xF8) | \
-            (((c & (1<<12))>>12) << 2) | \
-            (((c & (1<<7))>>7) << 1) | \
-            (((c & (1<<1))>>1) << 0);
+        if (depth > 0) {
+            *(back_buffer+(y_int*row_size)+x) = \
+                (*(back_buffer+(y_int*row_size)+x) & 0xF8) | \
+                (((c & (1<<15))>>15) << 2) | \
+                (((c & (1<<10))>>10) << 1) | \
+                (((c & (1<<4))>>4) << 0);
+        }
+        
+        if (depth > 1) {
+            *(back_buffer+(plane_size)+(y_int*row_size)+x) = \
+                (*(back_buffer+(plane_size)+(y_int*row_size)+x) & 0xF8) | \
+                (((c & (1<<14))>>14) << 2) | \
+                (((c & (1<<9))>>9) << 1) | \
+                (((c & (1<<3))>>3) << 0);
+        }
+        
+        if (depth > 2) {
+            *(back_buffer+(2*plane_size)+(y_int*row_size)+x) = \
+                (*(back_buffer+(2*plane_size)+(y_int*row_size)+x) & 0xF8) | \
+                (((c & (1<<13))>>13) << 2) | \
+                (((c & (1<<8))>>8) << 1) | \
+                (((c & (1<<2))>>2) << 0);
+        }
+        
+        if (depth > 3) {
+            *(back_buffer+(3*plane_size)+(y_int*row_size)+x) = \
+                (*(back_buffer+(3*plane_size)+(y_int*row_size)+x) & 0xF8) | \
+                (((c & (1<<12))>>12) << 2) | \
+                (((c & (1<<7))>>7) << 1) | \
+                (((c & (1<<1))>>1) << 0);
+        }
     }
 }
 
@@ -195,20 +301,17 @@ void RGBmatrixPanelCPLD::fillScreen(uint16_t c) {
         color |= (( (c & (1 << (7+p))) >> (7+p)) << 1);   // lower green
         color |= (  (c & (1 << (1+p))) >> (1+p));         // lower blue
         color |= (color << 3); // duplicate lower and upper colors
-        memset((matrixbuff[0]+(depth-p-1)*plane_size), color, bufSize);
+        memset((back_buffer+(depth-p-1)*plane_size), color, bufSize);
     }
-    
-    // Add latch signal to last byte of each plane of each row
+
+    // Add row and latch signals to last byte of each plane of each row
     for (uint32_t i=1; i<=(depth*16); i++) {
-        *(matrixbuff[0]+(row_size*i)-1) |= (1<<6);
+        *(back_buffer+(row_size*i)-1) |= (1<<6);
     }
     
-    // Add row increment signal
-    // Row increment at the beginning of the plane=0 data (longest time period)
-    // That is, right after displaying the last plane (shortest time period) of the previous row
-    // There should only be 16 row-increment bits set total, as all panels must be chained together
-    for (uint32_t i=1; i<=16; i++) {
-        *(matrixbuff[0]+(row_size*i)-1) |= (1<<7);
+    // Add row and latch signals to last byte of each plane of each row
+    for (uint32_t i=1; i<=(depth*16); i++) {
+        *(back_buffer+(row_size*i)-1) |= (1<<7);
     }
 }
 
@@ -299,12 +402,6 @@ uint16_t RGBmatrixPanelCPLD::ColorHSV(
 
 void RGBmatrixPanelCPLD::updateDisplay(void) {
     /* 
-        For each row, we want to display all color planes, 
-          then move onto the next row. This avoids ghosting
-          issues if you try to do it the other way. 
-          From: www.rayslogic.com/propeller/Programming/AdafruitRGB/AdafruitRGB.htm
-          Via: https://github.com/pkourany/RGBmatrixPanel_IDE/blob/master/firmware/RGBmatrixPanel.cpp
-        
         At 30 MHz, sending a row takes (1 / 30 MHz) * 8 * numCols
                                         for numCols = 128, time = 7.5 us
         
@@ -319,26 +416,37 @@ void RGBmatrixPanelCPLD::updateDisplay(void) {
         Plane 3 displays for 1 cycle
     */
 
-    if (resync_flag && row==15 && plane == 3) {
-      pinResetFast(clr_pin);
-      pinSetFast(clr_pin);
-      resync_flag = false;
+    pinSetFast(oe_pin);
+    
+    if (row == 15 && plane == (depth-1)) {
+        if (resync_flag) {
+            pinResetFast(clr_pin);
+            pinSetFast(clr_pin);
+            resync_flag = false;
+        }
+        if (swap_requested) {
+            temp = front_buffer;
+            front_buffer = back_buffer;
+            back_buffer = temp;
+            swap_requested = false;
+        }
     }
-
-    displayTimer.resetPeriod_SIT((69 * (1<<(depth-plane-1))), uSec);
-
-    if (plane == (depth-1)) {
-        plane = 0;
-        if (row == 15) {
-            row = 0;
+    
+    displayTimer.resetPeriod_SIT((74 * (1<<(depth-plane-1))), uSec);
+    
+    if (row == 15) {
+        row = 0;
+        if (plane == (depth-1)) {
+            plane = 0;        
         } else {
-            row++;
+            plane++;
         }
     } else {
-        plane++;
+        row++;
     }
-
-    SPI.transfer(matrixbuff[0] + (plane*plane_size) + (row*row_size), NULL, row_size, rowCompleteCallback);
+    
+    SPI.transfer(front_buffer + (plane*plane_size) + (row*row_size), NULL, row_size, rowCompleteCallback);
+    pinResetFast(oe_pin);
 }
 
 void RGBmatrixPanelCPLD::resync(void) {
