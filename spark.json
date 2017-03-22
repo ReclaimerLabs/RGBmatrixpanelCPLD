@@ -1,7 +1,0 @@
-{
-	"name": "RGBmatrixPanelCPLD",
-	"author": "Jason Cerundolo",
-	"version": "0.9.9",
-	"license": "MIT",
-	"description": "RGB LED matrix panel using CPLD hardware"
-}
