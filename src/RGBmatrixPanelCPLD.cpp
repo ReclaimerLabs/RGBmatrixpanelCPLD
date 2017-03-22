@@ -41,6 +41,7 @@ to <1% for two 32x32 panels. The limited factor is now RAM and
 transfer speed. 
 */
 
+#include "application.h"
 #include "RGBmatrixPanelCPLD.h"
 #include "gamma.h"
 #include "SparkIntervalTimer.h"

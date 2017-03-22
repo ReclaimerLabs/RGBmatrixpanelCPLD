@@ -2,6 +2,7 @@
 #define _GAMMA_H_
 
 //#include <avr/pgmspace.h>
+#include "application.h"
 
 static const uint8_t PROGMEM CPLD_gamma[] = {
   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,

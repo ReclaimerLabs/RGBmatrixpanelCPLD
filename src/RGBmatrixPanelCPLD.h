@@ -44,6 +44,7 @@ transfer speed.
 #ifndef _RGBMATRIXPANELCPLD_H
 #define _RGBMATRIXPANELCPLD_H
 
+#include "application.h"
 #include "Adafruit_mfGFX.h"
 
 class RGBmatrixPanelCPLD : public Adafruit_GFX {

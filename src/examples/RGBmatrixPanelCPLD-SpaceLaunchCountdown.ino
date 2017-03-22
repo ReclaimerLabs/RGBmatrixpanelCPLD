@@ -12,6 +12,9 @@ Be sure to include the following libraries
 
 */
 
+#include "application.h"
+#include "RGBmatrixPanelCPLD.h"
+
 RGBmatrixPanelCPLD display(32, 32);
 
 StaticJsonBuffer<2000> jsonBuffer;
