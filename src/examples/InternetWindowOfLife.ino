@@ -50,13 +50,13 @@ typedef struct {
 } GameOfLife;
 
 // Allocate buffers and GameOfLife objects for R, G and B universes: 
-uint8_t sg_red_buffer[BUFFER_SIZE];
+static uint8_t sg_red_buffer[BUFFER_SIZE];
 static GameOfLife sg_red_universe;
 
-uint8_t sg_green_buffer[BUFFER_SIZE];
+static uint8_t sg_green_buffer[BUFFER_SIZE];
 static GameOfLife sg_green_universe;
 
-uint8_t sg_blue_buffer[BUFFER_SIZE];
+static uint8_t sg_blue_buffer[BUFFER_SIZE];
 static GameOfLife sg_blue_universe;
 
 
