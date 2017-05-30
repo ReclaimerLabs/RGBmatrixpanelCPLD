@@ -1,5 +1,7 @@
 /*
 
+This demo is highly experimental. "Alpha" would be generous. 
+
 This demo displays time to the next rocket launch.
 Powered by launchlibrary.net. 
 
@@ -15,7 +17,7 @@ Be sure to include the following libraries
 #include "application.h"
 #include "RGBmatrixPanelCPLD.h"
 
-RGBmatrixPanelCPLD display(32, 32);
+RGBmatrixPanelCPLD display(128, 64);
 
 StaticJsonBuffer<2000> jsonBuffer;
 
@@ -57,7 +59,7 @@ void setup() {
         display.write('D');
         display.resync();
         
-        launch_lib.println("GET /1.1/launch/next/1 HTTP/1.0");
+        launch_lib.println("GET /1.2/launch/next/1 HTTP/1.0");
         launch_lib.println("Host: launchlibrary.net");
         launch_lib.println("Content-Length: 0");
         launch_lib.println("User-Agent: Mozilla/4.0");

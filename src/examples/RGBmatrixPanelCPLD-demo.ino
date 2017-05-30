@@ -4,17 +4,12 @@ This demo shows off some of the functionality of the
 RGBmatrixPanelCPLD library. Its usage is similar to 
 the RGBmatrixPanel library. 
 
-Be sure to include the following libraries 
-* RGBmatrixPanelCPLD
-* SparkIntervalTimer
-* Adafruit_mfGFX
-
 */
 
 #include "application.h"
 #include "RGBmatrixPanelCPLD.h"
 
-RGBmatrixPanelCPLD display(32, 32);
+RGBmatrixPanelCPLD display(128, 64);
 
 void setup() {
     display.begin();
@@ -28,17 +23,18 @@ void setup() {
     display.write('O');
     display.write('N');
 
-    display.drawLine(0,16,16,16,display.Color444(0xF,0x0,0x0));
-    display.fillRect(4,18,4,4,display.Color444(0x0,0x0,0xF));
-    display.drawRect(16,20,16,6,display.Color444(0x0,0xF,0x0));
+    display.drawLine(111,63,127,47,display.Color444(0x7,0x0,0x7));
+    display.fillRect(72,18,4,4,display.Color444(0x0,0x0,0x7));
+    display.drawRect(16,50,16,6,display.Color444(0x0,0x7,0x0));
 }
 
 void loop() {
     static bool isOn = true;
     if (isOn) {
-        display.drawPixel(2,30,display.Color444(0xF,0xF,0xF));
+        display.drawPixel(2,30,display.Color444(0x7,0x0,0x0));
     } else {
         display.drawPixel(2,30,display.Color444(0x0,0x0,0x0));
     }
     isOn = !isOn;
+    delay(1000);
 }
